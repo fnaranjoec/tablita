@@ -1,0 +1,41 @@
+{
+  "name": "coupon-service",
+  "version": "1.0.0",
+  "description": "coupon microservice",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "watch": "babel-watch -L src/index.js",
+    "db:migrate": "sequelize db:migrate",
+    "db:migrate:undo": "sequelize db:migrate:undo"
+  },
+  "keywords": [],
+  "author": "Veritasoft S. A.",
+  "license": "ISC",
+  "devDependencies": {
+    "babel-watch": "^7.0.0"
+  },
+  "dependencies": {
+    "@babel/core": "^7.10.5",
+    "@babel/polyfill": "^7.10.4",
+    "@babel/preset-env": "^7.10.4",
+    "async": "^3.2.0",
+    "babel-plugin-module-resolver": "^4.0.0",
+    "bcryptjs": "^2.4.3",
+    "body-parser": "^1.19.0",
+    "bull": "^3.18.0",
+    "circular-json": "^0.5.9",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.0.0",
+    "date-fns": "^2.14.0",
+    "express": "^4.17.1",
+    "moment": "^2.27.0",
+    "mysql2": "^2.1.0",
+    "node-gyp": "^7.0.0",
+    "sequelize": "^6.3.3",
+    "sequelize-cli": "^6.2.0",
+    "uuid": "^8.2.0",
+    "uuidv4": "^6.1.1",
+    "voucher-code-generator": "^1.1.1"
+  }
+}

@@ -1,0 +1,504 @@
+version: "3"
+
+networks:
+  network-tablita:
+    driver: bridge
+
+
+volumes:
+  #db-data2:
+  #  external: true
+  #db-redis:
+  #  external: true
+  app-repository-docs:
+    external: true
+
+
+services:
+  # ---> DB-SERVICE //
+  db-tablita:
+    image: mysql:5.7.20
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=Gjc*27911972
+      - MYSQL_DATABASE=tablita
+      - TZ=America/Guayaquil
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--default-time-zone=-05:00", "--explicit_defaults_for_timestamp", "--ignore-db-dir=lost+found", "--innodb-use-native-aio=0", "--disable-partition-engine-check", "--default-authentication-plugin=mysql_native_password"]
+    #command: ["sh", "echo America/Guayaquil > /etc/timezone"]
+    #command: ["sh", "-c", "ln -snf /usr/share/zoneinfo/America/Guayaquil /etc/localtime && echo 'America/Guayaquil' > /etc/timezone"]
+    hostname: "db-tablita"
+    container_name: "db-tablita"
+    ports:
+     - 0.0.0.0:7200-7200:3306
+    networks:
+      - network-tablita
+    volumes:
+      - ./mysql-data:/var/lib/mysql:rw
+      - ./mysql-init-files:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-uroot", "-pGjc*27911972"]
+      timeout: 20s
+      retries: 10
+
+  # ---> REDIS SERVER
+  redis-tablita:
+    image: redis:6.0.9-alpine
+    restart: always
+#    command: "redis-cli config set stop-writes-on-bgsave-error no"
+#    command: ["chmod 700 /var/log/redis/redis-server.log"]
+#    command: ["ln -s /var/run/redis/redis.sock /tmp/redis.sock"]
+#    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    hostname: redis-tablita
+    container_name: redis-tablita
+    networks:
+      - network-tablita
+    ports:
+      - 6379:6379/tcp
+    #protocol: tcp
+    #mode: ingress
+    #volumes:
+      ##- db-redis:/data/tmp
+      #- "./redis/conf/redis.conf:/usr/local/etc/redis/redis.conf"
+      #- "./redis/data:/var/lib/redis:rw"
+      ##- "./redis/data/email:/data"
+    #deploy:
+    #  - replicas: 1
+
+  # ---> PROXY
+  proxy-tablita:
+    build: "./proxy"
+    restart: always
+    depends_on:
+      - gateway-tablita
+      - gateway-ecommerce-tablita
+    environment:
+      - USER_SERVICE_URI=http://user-tablita:7100/api/v1
+      - PRODUCT_SERVICE_URI=http://product-tablita:7101/api/v1
+      - MEDIA_SERVICE_URI=http://media-tablita:7102/api/v1
+      - CODE_SERVICE_URI=http://code-tablita:7103/api/v1
+      - COUPON_SERVICE_URI=http://coupon-tablita:7104/api/v1
+      - MAILING_SERVICE_URI=http://mailing-tablita:7105/api/v1
+      #- DOCTOR_SERVICE_URI=http://doctor-tablita:7106/api/v1
+      - CLUSTER_SERVICE_URI=http://cluster-tablita:7110/api/v1
+      - S3_PROTOCOL_PATH=http://
+      - S3_BUCKET_PATH=/coupons
+      - PREFIX_BRANDS=BRANDS
+      - PREFIX_PRODUCTS=PRODUCTS
+      - PREFIX_CATEGORIES=CATEGORIES
+      - PREFIX_MEDIAS=MEDIAS
+      - PREFIX_MEDIA_PRODUCT=MEDIA-PRODUCT
+      - PREFIX_CUSTOMERS=CUSTOMERS
+      - PREFIX_REDIME_FILE=REDIME-FILE
+      - MAX_CODE_CHARS=20
+      #- ENVIRONMENT=production
+      - ENVIRONMENT=development
+      - SECRET_ACCESS_KEY=Gjc*27911972@Made*2924#0992881089001
+      - SECRET_REFRESH_KEY=Gjc*27911972@Made*2924#0913238713
+      - EXP_ACCESS_KEY=3600
+      - EXP_REFRESH_KEY=86400
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: proxy-tablita
+    container_name: proxy-tablita
+    ports:
+      - 8080:8080
+      #- 443:443
+    networks:
+      - network-tablita
+    volumes:
+      - ./proxy:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> GATEWAY
+  gateway-tablita:
+    build: "./api-gateway"
+    restart: always
+    depends_on:
+      - db-tablita
+      - redis-tablita
+      - user-tablita
+      - product-tablita
+      - media-tablita
+      - code-tablita
+      - coupon-tablita
+      - mailing-tablita
+      #- doctor-service
+    environment:
+      - USER_SERVICE_URI=http://user-tablita:7100/api/v1
+      - PRODUCT_SERVICE_URI=http://product-tablita:7101/api/v1
+      - MEDIA_SERVICE_URI=http://media-tablita:7102/api/v1
+      - CODE_SERVICE_URI=http://code-tablita:7103/api/v1
+      - COUPON_SERVICE_URI=http://coupon-tablita:7104/api/v1
+      - MAILING_SERVICE_URI=http://mailing-tablita:7105/api/v1
+      - DOCTOR_SERVICE_URI=http://doctor-tablita:7106/api/v1
+      - CLUSTER_SERVICE_URI=http://cluster-tablita:7110/api/v1
+      - S3_PROTOCOL_PATH=http://
+      - S3_BUCKET_PATH=/coupons
+      - PREFIX_BRANDS=BRANDS
+      - PREFIX_PRODUCTS=PRODUCTS
+      - PREFIX_CATEGORIES=CATEGORIES
+      - PREFIX_MEDIAS=MEDIAS
+      - PREFIX_MEDIA_PRODUCT=MEDIA-PRODUCT
+      - PREFIX_CUSTOMERS=CUSTOMERS
+      - PREFIX_REDIME_FILE=REDIME-FILE
+      - PREFIX_DOCTORS=DOCTORS
+      - PREFIX_DOCTORS_FILE=DOCTORS-FILE
+      - MAX_CODE_CHARS=20
+      - ENVIRONMENT=development
+      - SECRET_ACCESS_KEY=Gjc*27911972@Made*2924#0992881089001
+      - SECRET_REFRESH_KEY=Gjc*27911972@Made*2924#0913238713
+      - EXP_ACCESS_KEY=3600
+      - EXP_REFRESH_KEY=3153600000
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: gateway-tablita
+    container_name: gateway-tablita
+    ports:
+      - 7000:7000
+    networks:
+      - network-tablita
+    volumes:
+      - ./api-gateway:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> GATEWAY-ECOMMERCE
+  gateway-ecommerce-tablita:
+    build: "./api-gateway-ecommerce"
+    restart: always
+    depends_on:
+      - db-tablita
+      - redis-tablita
+      - user-tablita
+      - product-tablita
+      - media-tablita
+      - code-tablita
+      - coupon-tablita
+      - mailing-tablita
+    environment:
+      - USER_SERVICE_URI=http://user-tablita:7100/api/v1
+      - PRODUCT_SERVICE_URI=http://product-tablita:7101/api/v1
+      - MEDIA_SERVICE_URI=http://media-tablita:7102/api/v1
+      - CODE_SERVICE_URI=http://code-tablita:7103/api/v1
+      - COUPON_SERVICE_URI=http://coupon-tablita:7104/api/v1
+      - MAILING_SERVICE_URI=http://mailing-tablita:7105/api/v1
+      - DOCTOR_SERVICE_URI=http://doctor-tablita:7106/api/v1
+      - CLUSTER_SERVICE_URI=http://cluster-tablita:7110/api/v1
+      - S3_PROTOCOL_PATH=http://
+      - S3_BUCKET_PATH=/coupons
+      - PREFIX_BRANDS=BRANDS
+      - PREFIX_PRODUCTS=PRODUCTS
+      - PREFIX_CATEGORIES=CATEGORIES
+      - PREFIX_MEDIAS=MEDIAS
+      - PREFIX_MEDIA_PRODUCT=MEDIA-PRODUCT
+      - PREFIX_CUSTOMERS=CUSTOMERS
+      - PREFIX_REDIME_FILE=REDIME-FILE
+      - MAX_CODE_CHARS=20
+      - ENVIRONMENT=development
+      - SECRET_ACCESS_KEY=Gjc*27911972@Made*2924#0992881089001
+      - SECRET_REFRESH_KEY=Gjc*27911972@Made*2924#0913238713
+      - EXP_ACCESS_KEY=3600
+      - EXP_REFRESH_KEY=86400
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: gateway-ecommerce-tablita
+    container_name: gateway-ecommerce-tablita
+    ports:
+      - 7001:7001
+    networks:
+      - network-tablita
+    volumes:
+      - ./api-gateway-ecommerce:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+
+  # ---> USER - SERVICE
+  user-tablita:
+    build: "./services/user-service"
+    restart: always
+    depends_on:
+      - db-tablita
+      - redis-tablita
+    links:
+      - "db-tablita:mysql"
+      - "redis-tablita:redis"
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: user-tablita
+    container_name: user-tablita
+    ports:
+      - 7100:7100
+    networks:
+      - network-tablita
+    volumes:
+      - ./services/user-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> PRODUCT - SERVICE
+  product-tablita:
+    build: "./services/product-service"
+    restart: always
+    depends_on:
+      - db-tablita
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: product-tablita
+    container_name: product-tablita
+    ports:
+      - 7101:7101
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+    volumes:
+      - ./services/product-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> MEDIA - SERVICE
+  media-tablita:
+    build: "./services/media-service"
+    restart: always
+    depends_on:
+      - db-tablita
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: media-tablita
+    container_name: media-tablita
+    ports:
+      - 7102:7102
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+    volumes:
+      - ./services/media-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> CODE - SERVICE
+  code-tablita:
+    build: "./services/code-service"
+    restart: always
+    depends_on:
+      - db-tablita
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: code-tablita
+    container_name: code-tablita
+    ports:
+      - 7103:7103
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+    volumes:
+      - ./services/code-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> COUPON - SERVICE
+  coupon-tablita:
+    build: "./services/coupon-service"
+    restart: always
+    depends_on:
+      - db-tablita
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: coupon-tablita
+    container_name: coupon-tablita
+    ports:
+      - 7104:7104
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+    volumes:
+      - ./services/coupon-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> MAILING - SERVICE
+  mailing-tablita:
+    build: "./services/mailing-service"
+    restart: always
+    depends_on:
+      - redis-tablita
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      #- RABBITMQ_URL=amqp://queue-service:5672
+      - MAILING_SERVICE_URI=http://mailing-tablita:7105/api/v1
+      - REDIS_HOST=redis-tablita
+    hostname: mailing-tablita
+    container_name: mailing-tablita
+    ports:
+      - 7105:7105
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+      - "redis-tablita:redis"
+    volumes:
+      - ./services/mailing-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> DOCTOR - SERVICE
+  doctor-tablita:
+    build: "./services/doctor-service"
+    restart: always
+    depends_on:
+      - db-tablita
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: doctor-tablita
+    container_name: doctor-tablita
+    ports:
+      - 7106:7106
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+    volumes:
+      - ./services/doctor-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> UPLOAD - SERVICE
+  upload-tablita:
+    build: "./services/upload-service"
+    #depends_on:
+    #  - db-service
+    restart: always
+    environment:
+      #- DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      #- ENVIRONMENT=development
+      - UPLOAD_PATH=/opt/app/uploads
+      - ENVIRONMENT=production
+    hostname: upload-tablita
+    container_name: upload-tablita
+    ports:
+      - 7109:7109
+    networks:
+      - network-tablita
+    #links:
+    #  - "db-service:mysql"
+    volumes:
+      - ./services/upload-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+  # ---> CLUSTER - SERVICE
+  cluster-tablita:
+    build: "./services/cluster-service"
+    #depends_on:
+    #  - db-service
+    restart: always
+    environment:
+      #- DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      #- ENVIRONMENT=development
+      - UPLOAD_PATH=/opt/app/uploads
+      - ENVIRONMENT=production
+      - COUPON_SERVICE_URI=http://coupon-tablita:7104/api/v1
+    hostname: cluster-tablita
+    container_name: cluster-tablita
+    ports:
+      - 7110:7110
+    networks:
+      - network-tablita
+    #links:
+    #  - "db-tablita:mysql"
+    volumes:
+      - ./services/cluster-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+  # ---> ACTIVECAMPAIGN - SERVICE
+  activecampaign-tablita:
+    build: "./services/activecampaign-service"
+    depends_on:
+      - db-tablita
+    restart: always
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-tablita/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/tablita?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      #- ENVIRONMENT=development
+      - UPLOAD_PATH=/opt/app/uploads
+      - ENVIRONMENT=production
+      - COUPON_SERVICE_URI=http://coupon-tablita:7104/api/v1
+      - USER_SERVICE_URI=http://user-tablita:7100/api/v1
+      #- ACTIVECAMPAIGN_URI=https://fnaranjoec.api-us1.com/api/3
+      - ACTIVECAMPAIGN_URI=https://latablita.api-us1.com/api/3
+      #- ACTIVECAMPAIGN_TOKEN=3d5811914e07564beebe5817b232380e6068a26901c4c4277dcb05bcb76d5ce5124dacc3
+      - ACTIVECAMPAIGN_TOKEN=63a19cd4cbb4b1f674d0761dd388cc019a69a88a9bf0a6291537398355a382bf62547813
+    hostname: activecampaign-tablita
+    container_name: activecampaign-tablita
+    ports:
+      - 7111:7111
+    networks:
+      - network-tablita
+    links:
+      - "db-tablita:mysql"
+    volumes:
+      - ./services/activecampaign-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw

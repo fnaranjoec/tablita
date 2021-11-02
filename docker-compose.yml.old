@@ -1,0 +1,499 @@
+version: "3"
+
+services:
+
+  # ---> DB-SERVICE
+  db-service:
+    image: mysql:5.7.20
+    restart: always
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci", "--explicit_defaults_for_timestamp", "--ignore-db-dir=lost+found", "--innodb-use-native-aio=0", "--default-time-zone=-05"]
+    environment:
+      - MYSQL_ROOT_PASSWORD=Gjc*27911972
+      - MYSQL_DATABASE=tablita
+      - TZ=America/Guayaquil
+    hostname: "db-service"
+    container_name: "db-service"
+    ports:
+     - 0.0.0.0:7200-7200:3306
+    networks:
+      - app-network
+    volumes:
+      - ./mysql-data:/var/lib/mysql:rw
+      - ./mysql-init-files:/docker-entrypoint-initdb.d
+      # - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
+      retries: 10
+
+#  # ---> rabittMQ SERVER
+#  # default username and password of guest / guest
+#  # You should map the folder /var/lib/rabbitmq/mnesia instead of /var/lib/rabbitmq.
+#  queue-service:
+#    image: rabbitmq:3.8.6-management-alpine
+#    restart: unless-stopped
+#    #command: ["echo '[rabbitmq_management,rabbitmq_management_visualiser, rabbitmq_amqp1_0].' > /etc/rabbitmq/enabled_plugins", "echo 'rabbitmq-plugins enable rabbitmq_amqp1_0' > /etc/rabbitmq/enabled_plugins"]
+#    #command: ["rabbitmqctl", "--erlang-cookie"]
+#    tty: true
+#    hostname: rabbitMQ
+#    container_name: rabbitMQ
+#    ports:
+#      - 5672:5672
+#      - 15672:15672
+#    networks:
+#      - app-network
+#    volumes:
+#      - ./rabbitmq/etc/:/etc/rabbitmq/
+#      - ./rabbitmq/data/:/var/lib/rabbitmq/mnesia
+#      - ./rabbitmq/logs/:/var/log/rabbitmq/
+#    #environment:
+#        #RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
+#        #RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+#        #RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+
+
+  # ---> REDIS SERVER
+  redis-service:
+    image: redis:6.0.9-alpine
+    restart: unless-stopped
+#    command: "redis-cli config set stop-writes-on-bgsave-error no"
+#    command: ["chmod 700 /var/log/redis/redis-server.log"]
+#    command: ["ln -s /var/run/redis/redis.sock /tmp/redis.sock"]
+#    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    hostname: redis-service
+    container_name: redis-service
+    networks:
+      - app-network
+    ports:
+      - 6379:6379/tcp
+    #protocol: tcp
+    #mode: ingress
+    #volumes:
+      ##- db-redis:/data/tmp
+      #- "./redis/conf/redis.conf:/usr/local/etc/redis/redis.conf"
+      #- "./redis/data:/var/lib/redis:rw"
+      ##- "./redis/data/email:/data"
+    #deploy:
+    #  - replicas: 1
+
+  # ---> PROXY
+  proxy:
+    build: "./proxy"
+    restart: unless-stopped
+    depends_on:
+      - api-gateway
+      - api-gateway-ecommerce
+    environment:
+      - USER_SERVICE_URI=http://user-service:7100/api/v1
+      - PRODUCT_SERVICE_URI=http://product-service:7101/api/v1
+      - MEDIA_SERVICE_URI=http://media-service:7102/api/v1
+      - CODE_SERVICE_URI=http://code-service:7103/api/v1
+      - COUPON_SERVICE_URI=http://coupon-service:7104/api/v1
+      - MAILING_SERVICE_URI=http://mailing-service:7105/api/v1
+      - DOCTOR_SERVICE_URI=http://doctor-service:7106/api/v1
+      - CLUSTER_SERVICE_URI=http://cluster-service:7110/api/v1
+      - S3_PROTOCOL_PATH=http://
+      - S3_BUCKET_PATH=/coupons
+      - PREFIX_BRANDS=BRANDS
+      - PREFIX_PRODUCTS=PRODUCTS
+      - PREFIX_CATEGORIES=CATEGORIES
+      - PREFIX_MEDIAS=MEDIAS
+      - PREFIX_MEDIA_PRODUCT=MEDIA-PRODUCT
+      - PREFIX_CUSTOMERS=CUSTOMERS
+      - PREFIX_REDIME_FILE=REDIME-FILE
+      - MAX_CODE_CHARS=20
+      #- ENVIRONMENT=production
+      - ENVIRONMENT=development
+      - SECRET_ACCESS_KEY=Gjc*27911972@Made*2924#0992881089001
+      - SECRET_REFRESH_KEY=Gjc*27911972@Made*2924#0913238713
+      - EXP_ACCESS_KEY=3600
+      - EXP_REFRESH_KEY=86400
+      - RABBITMQ_URL=amqp://queue-service:5672
+      #- RABBITMQ_URL=amqp://51.15.230.124:5672
+    hostname: proxy
+    container_name: proxy
+    ports:
+      - 8080:8080
+      #- 443:443
+    networks:
+      - app-network
+#    network_mode: "host"
+    volumes:
+      - ./proxy:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> GATEWAY
+  api-gateway:
+    build: "./api-gateway"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+      #- queue-service
+      - redis-service
+      - user-service
+      - product-service
+      - media-service
+      - code-service
+      - coupon-service
+      - mailing-service
+      - doctor-service
+    environment:
+      - USER_SERVICE_URI=http://user-service:7100/api/v1
+      - PRODUCT_SERVICE_URI=http://product-service:7101/api/v1
+      - MEDIA_SERVICE_URI=http://media-service:7102/api/v1
+      - CODE_SERVICE_URI=http://code-service:7103/api/v1
+      - COUPON_SERVICE_URI=http://coupon-service:7104/api/v1
+      - MAILING_SERVICE_URI=http://mailing-service:7105/api/v1
+      - DOCTOR_SERVICE_URI=http://doctor-service:7106/api/v1
+      - CLUSTER_SERVICE_URI=http://cluster-service:7110/api/v1
+      - S3_PROTOCOL_PATH=http://
+      - S3_BUCKET_PATH=/coupons
+      - PREFIX_BRANDS=BRANDS
+      - PREFIX_PRODUCTS=PRODUCTS
+      - PREFIX_CATEGORIES=CATEGORIES
+      - PREFIX_MEDIAS=MEDIAS
+      - PREFIX_MEDIA_PRODUCT=MEDIA-PRODUCT
+      - PREFIX_CUSTOMERS=CUSTOMERS
+      - PREFIX_REDIME_FILE=REDIME-FILE
+      - PREFIX_DOCTORS=DOCTORS
+      - PREFIX_DOCTORS_FILE=DOCTORS-FILE
+      - MAX_CODE_CHARS=20
+      - ENVIRONMENT=development
+      - SECRET_ACCESS_KEY=Gjc*27911972@Made*2924#0992881089001
+      - SECRET_REFRESH_KEY=Gjc*27911972@Made*2924#0913238713
+      - EXP_ACCESS_KEY=3600
+      - EXP_REFRESH_KEY=3153600000
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: api-gateway
+    container_name: api-gateway
+    ports:
+      - 7000:7000
+    networks:
+      - app-network
+#    network_mode: "host"
+    volumes:
+      - ./api-gateway:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> GATEWAY-ECOMMERCE
+  api-gateway-ecommerce:
+    build: "./api-gateway-ecommerce"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+      #- queue-service
+      - redis-service
+      - user-service
+      - product-service
+      - media-service
+      - code-service
+      - coupon-service
+      - mailing-service
+    environment:
+      - USER_SERVICE_URI=http://user-service:7100/api/v1
+      - PRODUCT_SERVICE_URI=http://product-service:7101/api/v1
+      - MEDIA_SERVICE_URI=http://media-service:7102/api/v1
+      - CODE_SERVICE_URI=http://code-service:7103/api/v1
+      - COUPON_SERVICE_URI=http://coupon-service:7104/api/v1
+      - MAILING_SERVICE_URI=http://mailing-service:7105/api/v1
+      - S3_PROTOCOL_PATH=http://
+      - S3_BUCKET_PATH=/coupons
+      - PREFIX_BRANDS=BRANDS
+      - PREFIX_PRODUCTS=PRODUCTS
+      - PREFIX_CATEGORIES=CATEGORIES
+      - PREFIX_MEDIAS=MEDIAS
+      - PREFIX_MEDIA_PRODUCT=MEDIA-PRODUCT
+      - PREFIX_CUSTOMERS=CUSTOMERS
+      - PREFIX_REDIME_FILE=REDIME-FILE
+      - MAX_CODE_CHARS=20
+      - ENVIRONMENT=development
+      - SECRET_ACCESS_KEY=Gjc*27911972@Made*2924#0992881089001
+      - SECRET_REFRESH_KEY=Gjc*27911972@Made*2924#0913238713
+      - EXP_ACCESS_KEY=3600
+      - EXP_REFRESH_KEY=86400
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: api-gateway-ecommerce
+    container_name: api-gateway-ecommerce
+    ports:
+      - 7001:7001
+    networks:
+      - app-network
+#    network_mode: "host"
+    volumes:
+      - ./api-gateway-ecommerce:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+
+  # ---> USER - SERVICE
+  user-service:
+    build: "./services/user-service"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+      #- queue-service
+      - redis-service
+    links:
+      - "db-service:mysql"
+      - "redis-service:redis"
+      #- "queue-service:rabbitmq"
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      - RABBITMQ_URL=amqp://queue-service:5672
+    hostname: user-service
+    container_name: user-service
+    ports:
+      - 7100:7100
+    networks:
+      - app-network
+    volumes:
+      - ./services/user-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> PRODUCT - SERVICE
+  product-service:
+    build: "./services/product-service"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: product-service
+    container_name: product-service
+    ports:
+      - 7101:7101
+    networks:
+      - app-network
+    links:
+      - "db-service:mysql"
+    volumes:
+      - ./services/product-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> MEDIA - SERVICE
+  media-service:
+    build: "./services/media-service"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: media-service
+    container_name: media-service
+    ports:
+      - 7102:7102
+    networks:
+      - app-network
+    links:
+      - "db-service:mysql"
+    volumes:
+      - ./services/media-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> CODE - SERVICE
+  code-service:
+    build: "./services/code-service"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: code-service
+    container_name: code-service
+    ports:
+      - 7103:7103
+    networks:
+      - app-network
+    links:
+      - "db-service:mysql"
+    volumes:
+      - ./services/code-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> COUPON - SERVICE
+  coupon-service:
+    build: "./services/coupon-service"
+    restart: unless-stopped
+    depends_on:
+      - db-service
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: coupon-service
+    container_name: coupon-service
+    ports:
+      - 7104:7104
+    networks:
+      - app-network
+    links:
+      - "db-service:mysql"
+    volumes:
+      - ./services/coupon-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> MAILING - SERVICE
+  mailing-service:
+    build: "./services/mailing-service"
+    restart: unless-stopped
+    depends_on:
+      - redis-service
+      #- queue-service
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      - RABBITMQ_URL=amqp://queue-service:5672
+      - MAILING_SERVICE_URI=http://mailing-service:7105/api/v1
+    hostname: mailing-service
+    container_name: mailing-service
+    ports:
+      - 7105:7105
+    networks:
+      - app-network
+    links:
+      - "db-service:mysql"
+      - "redis-service:redis"
+      # - "queue-service:rabbitmq"
+    volumes:
+      - ./services/mailing-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> DOCTOR - SERVICE
+  doctor-service:
+    build: "./services/doctor-service"
+    depends_on:
+      - db-service
+    environment:
+      - DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+    hostname: doctor-service
+    container_name: doctor-service
+    ports:
+      - 7106:7106
+    networks:
+      - app-network
+    links:
+      - "db-service:mysql"
+    volumes:
+      - ./services/doctor-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+
+  # ---> UPLOAD - SERVICE
+  upload-service:
+    build: "./services/upload-service"
+    #depends_on:
+    #  - db-service
+    environment:
+      #- DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      #- ENVIRONMENT=development
+      - UPLOAD_PATH=/opt/app/uploads
+      - ENVIRONMENT=production
+    hostname: upload-service
+    container_name: upload-service
+    ports:
+      - 7109:7109
+    networks:
+      - app-network
+    #links:
+    #  - "db-service:mysql"
+    volumes:
+      - ./services/upload-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+
+  # ---> CLUSTER - SERVICE
+  cluster-service:
+    build: "./services/cluster-service"
+    #depends_on:
+    #  - db-service
+    environment:
+      #- DB_URI=mysql://root:Gjc*27911972@db-service/tablita?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@51.15.230.124/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@localhost/abbottcoupons?charset=UTF8
+      #- DB_URI=mysql://root:Gjc*27911972@192.168.100.9/abbottcoupons?charset=UTF8
+      - ENDPOINT_URI=/api/v1
+      - USER_SESSION_EXPIRY_HOURS=1
+      #- ENVIRONMENT=development
+      - UPLOAD_PATH=/opt/app/uploads
+      - ENVIRONMENT=production
+      - COUPON_SERVICE_URI=http://172.20.0.1:7104/api/v1
+    hostname: cluster-service
+    container_name: cluster-service
+    ports:
+      - 7110:7110
+    networks:
+      - app-network
+    #links:
+    #  - "db-service:mysql"
+    volumes:
+      - ./services/cluster-service:/opt/app
+      - app-repository-docs:/opt/app/uploads:rw
+
+volumes:
+  db-data2:
+    external: true
+  db-redis:
+    external: true
+  app-repository-docs:
+    external: true
+
+
+
+networks:
+  app-network:
+     driver: bridge
